@@ -13,19 +13,19 @@ import com.frank.live.stream.VideoStreamNew;
 
 public class LivePusherNew {
 
-    // Video encoding Device Open failed
+    //error of opening video encoder
     private final static int ERROR_VIDEO_ENCODER_OPEN = 0x01;
-    //Video frame encoding failed
+    //error of video encoding
     private final static int ERROR_VIDEO_ENCODE = 0x02;
-    // Audio coding Device Open failed
+    //error of opening audio encoder
     private final static int ERROR_AUDIO_ENCODER_OPEN = 0x03;
-    // Audio帧 coding 失败
+    //error of audio encoding
     private final static int ERROR_AUDIO_ENCODE = 0x04;
-    //RTMP Connection failed
+    //error of RTMP connecting server
     private final static int ERROR_RTMP_CONNECT = 0x05;
-    //RTMP Connection flow failed
+    //error of RTMP connecting stream
     private final static int ERROR_RTMP_CONNECT_STREAM = 0x06;
-    //RTMP Failed to send packet
+    //error of RTMP sending packet
     private final static int ERROR_RTMP_SEND_PACKET = 0x07;
 
     static {
@@ -38,7 +38,10 @@ public class LivePusherNew {
 
     private LiveStateChangeListener liveStateChangeListener;
 
+    private Activity activity;
+
     public LivePusherNew(Activity activity, VideoParam videoParam, AudioParam audioParam) {
+        this.activity = activity;
         native_init();
         videoStream = new VideoStream(this, activity, videoParam.getWidth(), videoParam.getHeight(),
                 videoParam.getBitRate(), videoParam.getFrameRate(), videoParam.getCameraId());
@@ -60,9 +63,9 @@ public class LivePusherNew {
     }
 
     /**
-     *  Set mute
+     * setting mute
      *
-     * @param isMute  Whether to mute
+     * @param isMute is mute or not
      */
     public void setMute(boolean isMute) {
         audioStream.setMute(isMute);
@@ -88,36 +91,36 @@ public class LivePusherNew {
     }
 
     /**
-     * Call this method when native reports an error
+     * Callback this method, when native occurring error
      *
      * @param errCode errCode
      */
     public void errorFromNative(int errCode) {
-        //Stop streaming
+        //stop pushing stream
         stopPush();
-        if (liveStateChangeListener != null) {
+        if (liveStateChangeListener != null && activity != null) {
             String msg = "";
             switch (errCode) {
                 case ERROR_VIDEO_ENCODER_OPEN:
-                    msg = " Video encoding Device Open failed ...";
+                    msg = activity.getString(R.string.error_video_encoder);
                     break;
                 case ERROR_VIDEO_ENCODE:
-                    msg = "Video frame encoding failed...";
+                    msg = activity.getString(R.string.error_video_encode);
                     break;
                 case ERROR_AUDIO_ENCODER_OPEN:
-                    msg = " Audio coding Device Open failed ...";
+                    msg = activity.getString(R.string.error_audio_encoder);
                     break;
                 case ERROR_AUDIO_ENCODE:
-                    msg = " Audio帧 coding 失败...";
+                    msg = activity.getString(R.string.error_audio_encode);
                     break;
                 case ERROR_RTMP_CONNECT:
-                    msg = "RTMP Connection failed...";
+                    msg = activity.getString(R.string.error_rtmp_connect);
                     break;
                 case ERROR_RTMP_CONNECT_STREAM:
-                    msg = "RTMP Connection flow failed ...";
+                    msg = activity.getString(R.string.error_rtmp_connect_strem);
                     break;
                 case ERROR_RTMP_SEND_PACKET:
-                    msg = "RTMP Failed to send packet...";
+                    msg = activity.getString(R.string.error_rtmp_send_packet);
                     break;
                 default:
                     break;

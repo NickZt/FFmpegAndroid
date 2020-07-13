@@ -2,24 +2,25 @@ package com.frank.ffmpeg.util;
 
 import android.annotation.SuppressLint;
 
+import com.frank.ffmpeg.FFmpegApplication;
 import com.frank.ffmpeg.format.VideoLayout;
 
 import java.util.List;
 import java.util.Locale;
 
 /**
- * ffmpeg工具：拼接 Command Line 处理音视频
+ * ffmpeg tool: assemble the complete command
  * Created by frank on 2018/1/23.
  */
 
 public class FFmpegUtil {
 
     /**
-     * 使用ffmpeg Command Line 进行 Audio转码
+     * transform audio, according to your assigning the output format
      *
-     * @param srcFile    源文件
-     * @param targetFile 目标文件（后缀指定转码格式）
-     * @return 转码后的文件
+     * @param srcFile    input file
+     * @param targetFile output file
+     * @return transform success or not
      */
     public static String[] transformAudio(String srcFile, String targetFile) {
         String transformAudioCmd = "ffmpeg -i %s %s";
@@ -27,28 +28,34 @@ public class FFmpegUtil {
         return transformAudioCmd.split(" ");
     }
 
+    public static String[] transformAudio(String srcFile, String acodec, String targetFile) {
+        String transformAudioCmd = "ffmpeg -i %s -acodec %s -ac 2 -ar 44100 %s";
+        transformAudioCmd = String.format(transformAudioCmd, srcFile, acodec, targetFile);
+        return transformAudioCmd.split(" ");
+    }
+
     /**
-     * 使用ffmpeg Command Line 进行 Audio剪切
+     * cut audio, you could assign the startTime and duration which you want to
      *
-     * @param srcFile    源文件
-     * @param startTime  剪切的开始时间(单位为秒)
-     * @param duration   剪切时长(单位为秒)
-     * @param targetFile 目标文件
-     * @return 剪切后的文件
+     * @param srcFile    input file
+     * @param startTime  start time in the audio(unit is second)
+     * @param duration   start time(unit is second)
+     * @param targetFile output file
+     * @return cut success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] cutAudio(String srcFile, int startTime, int duration, String targetFile) {
-        String cutAudioCmd = "ffmpeg -i %s -acodec copy -ss %d -t %d %s";
+        String cutAudioCmd = "ffmpeg -i %s -acodec copy -vn -ss %d -t %d %s";
         cutAudioCmd = String.format(cutAudioCmd, srcFile, startTime, duration, targetFile);
         return cutAudioCmd.split(" ");
     }
 
     /**
-     * 使用ffmpeg Command Line 进行 Audiomerge
+     * concat all the audio together
      *
-     * @param fileList   merge列表
-     * @param targetFile 目标文件
-     * @return merge后的文件
+     * @param fileList   list of files
+     * @param targetFile output file
+     * @return concat success or not
      */
     public static String[] concatAudio(List<String> fileList, String targetFile) {
 //        ffmpeg -i concat:%s|%s -acodec copy %s
@@ -61,68 +68,67 @@ public class FFmpegUtil {
             concatBuilder.append(file).append("|");
         }
         String concatStr = concatBuilder.substring(0, concatBuilder.length() - 1);
-        String concatAudioCmd = "ffmpeg -i %s -acodec libmp3lame -ab 128k -ac 2 -ar 44100 %s";
+        String concatAudioCmd = "ffmpeg -i %s -acodec copy %s";
         concatAudioCmd = String.format(concatAudioCmd, concatStr, targetFile);
         return concatAudioCmd.split(" ");
     }
 
     /**
-     * 使用ffmpeg Command Line 进行 Audio混合
+     * mix one and another audio
      *
-     * @param srcFile    源文件
-     * @param mixFile    待混合文件
-     * @param targetFile 目标文件
-     * @return 混合后的文件
+     * @param srcFile    input file
+     * @param mixFile    background music
+     * @param targetFile output file
+     * @return mix success or not
      */
     public static String[] mixAudio(String srcFile, String mixFile, String targetFile) {
-        //调节音量:使用-vol 50, 其中vol为0-100
+        //adjust volume:using '-vol 50', which is form 0 to 100
         String mixAudioCmd = "ffmpeg -i %s -i %s -filter_complex amix=inputs=2:duration=first -strict -2 %s";
         mixAudioCmd = String.format(mixAudioCmd, srcFile, mixFile, targetFile);
         return mixAudioCmd.split(" ");
     }
-    //混音公式：value = sample1 + sample2 - (sample1 * sample2 / (pow(2, 16-1) - 1))
+    //mixing formula: value = sample1 + sample2 - (sample1 * sample2 / (pow(2, 16-1) - 1))
 
 
     /**
-     * 使用ffmpeg Command Line 进行Audio and video synthesis
+     * mux audio and video together
      *
-     * @param videoFile 视频文件
-     * @param audioFile  Audio文件
-     * @param duration  视频时长
-     * @param muxFile   目标文件
-     * @return 合成后的文件
+     * @param videoFile the file of pure video
+     * @param audioFile the file of pure audio
+     * @param duration  the duration of video
+     * @param muxFile   output file
+     * @return mux success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] mediaMux(String videoFile, String audioFile, int duration, String muxFile) {
-        //-t:时长  如果忽略音视频时长，则把"-t %d"去掉
         String mixAudioCmd = "ffmpeg -i %s -i %s -t %d %s";
         mixAudioCmd = String.format(mixAudioCmd, videoFile, audioFile, duration, muxFile);
         return mixAudioCmd.split(" ");
     }
 
     /**
-     * 使用ffmpeg Command Line 进行抽取 Audio
+     * extract audio from media file
      *
-     * @param srcFile    原文件
-     * @param targetFile 目标文件
-     * @return 抽取后的 Audio文件
+     * @param srcFile    input file
+     * @param targetFile output file
+     * @return demux audio success or not
      */
     public static String[] extractAudio(String srcFile, String targetFile) {
-        //-vn:video not
+        //-vn: disable video
         String mixAudioCmd = "ffmpeg -i %s -acodec copy -vn %s";
         mixAudioCmd = String.format(mixAudioCmd, srcFile, targetFile);
         return mixAudioCmd.split(" ");
     }
 
     /**
-     * 使用ffmpeg Command Line 进行抽取视频
+     * extract pure video from media file
      *
-     * @param srcFile    原文件
-     * @param targetFile 目标文件
-     * @return 抽取后的视频文件
+     * @param srcFile    input file
+     * @param targetFile output file
+     * @return demux video success or not
      */
     public static String[] extractVideo(String srcFile, String targetFile) {
-        //-an audio not
+        //-an: disable audio
         String mixAudioCmd = "ffmpeg -i %s -vcodec copy -an %s";
         mixAudioCmd = String.format(mixAudioCmd, srcFile, targetFile);
         return mixAudioCmd.split(" ");
@@ -130,46 +136,91 @@ public class FFmpegUtil {
 
 
     /**
-     * 使用ffmpeg Command Line 进行视频转码
+     * transform video, according to your assigning the output format
      *
-     * @param srcFile    源文件
-     * @param targetFile 目标文件（后缀指定转码格式）
-     * @return 转码后的文件
+     * @param srcFile    input file
+     * @param targetFile output file
+     * @return transform video success or not
      */
     public static String[] transformVideo(String srcFile, String targetFile) {
-        // 指定视频的帧率、码率、分辨率
+        //just copy codec
+//        String transformVideoCmd = "ffmpeg -i %s -vcodec copy -acodec copy %s";
+        // assign the frameRate, bitRate and resolution
 //        String transformVideoCmd = "ffmpeg -i %s -r 25 -b 200 -s 1080x720 %s";
-        // 指定 Video encoding Device:解决有旋转角度的视频，转码后发生旋转的问题
-//        String transformVideoCmd = "ffmpeg -i %s -vcodec libx264 -acodec copy %s";
-        String transformVideoCmd = "ffmpeg -i %s -vcodec copy -acodec copy %s";
+        // assign the encoder
+        String transformVideoCmd = "ffmpeg -i %s -vcodec libx264 -acodec libmp3lame %s";
         transformVideoCmd = String.format(transformVideoCmd, srcFile, targetFile);
         return transformVideoCmd.split(" ");
     }
 
     /**
-     * 使用ffmpeg Command Line 进行视频剪切
+     * Using FFmpeg to transform video, with re-encode
      *
-     * @param srcFile    源文件
-     * @param startTime  剪切的开始时间(单位为秒)
-     * @param duration   剪切时长(单位为秒)
-     * @param targetFile 目标文件
-     * @return 剪切后的文件
+     * @param srcFile the source file
+     * @param targetFile target file
+     * @return transform video success or not
+     */
+    public static String[] transformVideoWithEncode(String srcFile, String targetFile) {
+        return transformVideoWithEncode(srcFile, 0, 0, targetFile);
+    }
+
+    /**
+     * Using FFmpeg to transform video, with re-encode and specific resolution
+     *
+     * @param srcFile  the source file
+     * @param width the width of video
+     * @param height the height of video
+     * @param targetFile target file
+     * @return transform video success or not
+     */
+    public static String[] transformVideoWithEncode(String srcFile, int width, int height, String targetFile) {
+        String transformVideoCmd;
+        if (width > 0 && height > 0) {
+            String scale = "-vf scale=" + width + ":" + height;
+            transformVideoCmd = "ffmpeg -i %s -vcodec libx264 -acodec aac " + scale + " %s";
+        } else {
+            transformVideoCmd = "ffmpeg -i %s -vcodec libx264 -acodec aac " + "%s";
+        }
+        transformVideoCmd = String.format(transformVideoCmd, srcFile, targetFile);
+        return transformVideoCmd.split(" ");
+    }
+
+    /**
+     * joint every single video together
+     * @param fileListPath the path file list
+     * @param targetPath output path
+     * @return joint video success or not
+     */
+    public static String[] jointVideo(String fileListPath, String targetPath) {
+        String jointVideoCmd = "ffmpeg -f concat -safe 0 -i %s -c copy %s";
+        jointVideoCmd = String.format(jointVideoCmd, fileListPath, targetPath);
+        return jointVideoCmd.split(" ");
+    }
+
+    /**
+     * cut video, you could assign the startTime and duration which you want to
+     *
+     * @param srcFile    input file
+     * @param startTime  startTime in the video(unit is second)
+     * @param duration   duration
+     * @param targetFile output file
+     * @return cut video success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] cutVideo(String srcFile, int startTime, int duration, String targetFile) {
-        //指定音 Video encoding Device:ffmpeg -i %s -ss %d -t %d -acodec libmp3lame -vcodec libx264 %s
+        //assign encoders: ffmpeg -i %s -ss %d -t %d -acodec libmp3lame -vcodec libx264 %s
         String cutVideoCmd = "ffmpeg -i %s -ss %d -t %d -acodec copy -vcodec copy %s";
         cutVideoCmd = String.format(cutVideoCmd, srcFile, startTime, duration, targetFile);
         return cutVideoCmd.split(" ");
     }
 
     /**
-     * 使用ffmpeg Command Line 进行视频截图
+     * screenshot from video, you could assign the specific time
      *
-     * @param srcFile    源文件
-     * @param time       截图开始时间
-     * @param targetFile 目标文件
-     * @return 截图后的文件
+     * @param srcFile    input file
+     * @param time       which time you want to shot
+     * @param targetFile output file
+     * @return screenshot success or not
      */
     public static String[] screenShot(String srcFile, int time, String targetFile) {
         String screenShotCmd = "ffmpeg -i %s -f image2 -ss %d -vframes 1 -an %s";
@@ -178,30 +229,77 @@ public class FFmpegUtil {
     }
 
     /**
-     * 使用ffmpeg Command Line 给视频添加水印
+     * add watermark with image to video, you could assign the location and bitRate
      *
-     * @param srcFile    源文件
-     * @param waterMark  水印文件路径
-     * @param targetFile 目标文件
-     * @return 添加水印后的文件
+     * @param srcFile    input file
+     * @param imgPath    the path of the image
+     * @param location   the location in the video(1:top left 2:top right 3:bottom left 4:bottom right)
+     * @param bitRate    bitRate
+     * @param offsetXY   the offset of x and y in the video
+     * @param targetFile output file
+     * @return add watermark success or not
      */
-    public static String[] addWaterMark(String srcFile, String waterMark, String resolution, int bitRate, String targetFile) {
-        String mBitRate = String.valueOf(bitRate) + "k";
-        String waterMarkCmd = "ffmpeg -i %s -i %s -s %s -b:v %s -filter_complex overlay=0:0 %s";
-        waterMarkCmd = String.format(waterMarkCmd, srcFile, waterMark, resolution, mBitRate, targetFile);
+    public static String[] addWaterMarkImg(String srcFile, String imgPath, int location, int bitRate, int offsetXY, String targetFile) {
+        String mBitRate = bitRate + "k";
+        String overlay;
+        int offset = ScreenUtil.dp2px(FFmpegApplication.getInstance(), offsetXY);
+        if (location == 1) {
+            overlay = "overlay='" + offset + ":" + offset + "'";
+        } else if (location == 2) {
+            overlay = "overlay='(main_w-overlay_w)-" + offset + ":" + offset + "'";
+        } else if (location == 3) {
+            overlay = "overlay='" + offset + ":(main_h-overlay_h)-" + offset + "'";
+        } else if (location == 4) {
+            overlay = "overlay='(main_w-overlay_w)-" + offset + ":(main_h-overlay_h)-" + offset + "'";
+        } else {
+            overlay = "overlay='(main_w-overlay_w)-" + offset + ":" + offset + "'";
+        }
+        String waterMarkCmd = "ffmpeg -i %s -i %s -b:v %s -filter_complex %s -preset:v superfast %s";
+        waterMarkCmd = String.format(waterMarkCmd, srcFile, imgPath, mBitRate, overlay, targetFile);
         return waterMarkCmd.split(" ");
     }
 
     /**
-     * 使用ffmpeg Command Line 进行视频转成Gif动图
+     * add watermark with gif to video, you could assign the location and bitRate
      *
-     * @param srcFile    源文件
-     * @param startTime  开始时间
-     * @param duration   截取时长
-     * @param targetFile 目标文件
-     * @param resolution 分辨率
-     * @param frameRate  帧率
-     * @return Gif文件
+     * @param srcFile    input file
+     * @param imgPath    the path of the gif
+     * @param location   the location in the video(1:top left 2:top right 3:bottom left 4:bottom right)
+     * @param bitRate    bitRate
+     * @param offsetXY   the offset of x and y in the video
+     * @param targetFile output file
+     * @return add watermark success or not
+     */
+    public static String[] addWaterMarkGif(String srcFile, String imgPath, int location, int bitRate, int offsetXY, String targetFile) {
+        String mBitRate = bitRate + "k";
+        String overlay;
+        int offset = ScreenUtil.dp2px(FFmpegApplication.getInstance(), offsetXY);
+        if (location == 1) {
+            overlay = "overlay='" + offset + ":" + offset + ":shortest=1'";
+        } else if (location == 2) {
+            overlay = "overlay='(main_w-overlay_w)-" + offset + ":" + offset + ":shortest=1'";
+        } else if (location == 3) {
+            overlay = "overlay='" + offset + ":(main_h-overlay_h)-" + offset + ":shortest=1'";
+        } else if (location == 4) {
+            overlay = "overlay='(main_w-overlay_w)-" + offset + ":(main_h-overlay_h)-" + offset + ":shortest=1'";
+        } else {
+            overlay = "overlay='(main_w-overlay_w)-" + offset + ":" + offset + ":shortest=1'";
+        }
+        String waterMarkCmd = "ffmpeg -i %s -ignore_loop 0 -i %s -b:v %s -filter_complex %s -preset:v superfast %s";
+        waterMarkCmd = String.format(waterMarkCmd, srcFile, imgPath, mBitRate, overlay, targetFile);
+        return waterMarkCmd.split(" ");
+    }
+
+    /**
+     * convert video into gif
+     *
+     * @param srcFile    input file
+     * @param startTime  startTime in the video
+     * @param duration   duration, how long you want to
+     * @param targetFile output file
+     * @param resolution resolution of the gif
+     * @param frameRate  frameRate of the gif
+     * @return convert gif success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] generateGif(String srcFile, int startTime, int duration,
@@ -213,62 +311,60 @@ public class FFmpegUtil {
     }
 
     /**
-     * 使用ffmpeg Command Line 进行屏幕录制
+     * screen record
      *
-     * @param size       视频尺寸大小
-     * @param recordTime 录屏时间
-     * @param targetFile 目标文件
-     * @return 屏幕录制文件
+     * @param size       size of video
+     * @param recordTime startTime in the video
+     * @param targetFile output file
+     * @return record success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] screenRecord(String size, int recordTime, String targetFile) {
-        //-vd x11:0,0 指录制所使用的偏移为 x=0 和 y=0
-        //String screenRecordCmd = "ffmpeg -vcodec mpeg4 -b 1000 -r 10 -g 300 -vd x11:0,0 -s %s %s";
         String screenRecordCmd = "ffmpeg -vcodec mpeg4 -b 1000 -r 10 -g 300 -vd x11:0,0 -s %s -t %d %s";
         screenRecordCmd = String.format(screenRecordCmd, size, recordTime, targetFile);
         return screenRecordCmd.split(" ");
     }
 
     /**
-     * 使用ffmpeg Command Line 进行图片合成视频
+     * convert s series of pictures into video
      *
-     * @param srcFile    源文件
-     * @param frameRate  合成视频帧率
-     * @param targetFile 目标文件
-     * @return 合成的视频文件
+     * @param srcFile    input file
+     * @param frameRate  frameRate
+     * @param targetFile output file
+     * @return convert success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] pictureToVideo(String srcFile, int frameRate, String targetFile) {
-        //-f image2：代表使用image2格式，需要放在输入文件前面
+        //-f: stand for format
         String combineVideo = "ffmpeg -f image2 -r %d -i %simg#d.jpg -vcodec mpeg4 %s";
         combineVideo = String.format(combineVideo, frameRate, srcFile, targetFile);
         combineVideo = combineVideo.replace("#", "%");
-        return combineVideo.split(" ");//以空格分割为字符串数组
+        return combineVideo.split(" ");
     }
 
     /**
-     * 转换图片尺寸大小
+     * convert resolution
      *
-     * @param srcFile    源文件
-     * @param resolution  分辨率
-     * @param targetFile 目标文件
-     * @return 转换后的图片 Command Line
+     * @param srcFile    input file
+     * @param resolution  resolution
+     * @param targetFile output file
+     * @return convert success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] convertResolution(String srcFile, String resolution, String targetFile) {
-        String convertCmd = "ffmpeg -i %s -s %s %s";
+        String convertCmd = "ffmpeg -i %s -s %s -pix_fmt yuv420p %s";
         convertCmd = String.format(convertCmd, srcFile, resolution, targetFile);
         return convertCmd.split(" ");
     }
 
     /**
-     *  Audio coding
+     * encode audio, you could assign the sampleRate and channel
      *
-     * @param srcFile    源文件pcm裸流
-     * @param targetFile  coding 后目标文件
-     * @param sampleRate 采样率
-     * @param channel    声道:单声道为1/立体声道为2
-     * @return  Audio coding 的 Command Line
+     * @param srcFile    pcm raw audio
+     * @param targetFile output file
+     * @param sampleRate sampleRate
+     * @param channel    sound channel: mono channel is 1, stereo channel is 2
+     * @return encode audio success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] encodeAudio(String srcFile, String targetFile, int sampleRate, int channel) {
@@ -278,19 +374,19 @@ public class FFmpegUtil {
     }
 
     /**
-     * 多画面拼接视频
+     * join multi videos together
      *
-     * @param input1      输入文件1
-     * @param input2      输入文件2
-     * @param videoLayout 视频布局
-     * @param targetFile  画面拼接文件
-     * @return 画面拼接的 Command Line
+     * @param input1      input one
+     * @param input2      input two
+     * @param videoLayout the layout of video, which could be horizontal or vertical
+     * @param targetFile  output file
+     * @return join success or not
      */
     public static String[] multiVideo(String input1, String input2, String targetFile, int videoLayout) {
 //        String multiVideo = "ffmpeg -i %s -i %s -i %s -i %s -filter_complex " +
 //                "\"[0:v]pad=iw*2:ih*2[a];[a][1:v]overlay=w[b];[b][2:v]overlay=0:h[c];[c][3:v]overlay=w:h\" %s";
-        String multiVideo = "ffmpeg -i %s -i %s -filter_complex hstack %s";//hstack:水平拼接，默认
-        if (videoLayout == VideoLayout.LAYOUT_VERTICAL) {//vstack:垂直拼接
+        String multiVideo = "ffmpeg -i %s -i %s -filter_complex hstack %s";//hstack: horizontal
+        if (videoLayout == VideoLayout.LAYOUT_VERTICAL) {//vstack: vertical
             multiVideo = multiVideo.replace("hstack", "vstack");
         }
         multiVideo = String.format(multiVideo, input1, input2, targetFile);
@@ -298,47 +394,47 @@ public class FFmpegUtil {
     }
 
     /**
-     * 视频反序倒播
+     * reverse video
      *
-     * @param inputFile  输入文件
-     * @param targetFile 反序文件
-     * @return 视频反序的 Command Line
+     * @param inputFile  input file
+     * @param targetFile output file
+     * @return reverse success or not
      */
     public static String[] reverseVideo(String inputFile, String targetFile) {
-        //FIXME  Audio也反序
-//        String reverseVideo = "ffmpeg -i %s -filter_complex [0:v]reverse[v];[0:a]areverse[a] -map [v] -map [a] %s";
-        String reverseVideo = "ffmpeg -i %s -filter_complex [0:v]reverse[v] -map [v] %s";//单纯视频反序
+        //-vf reverse: only video reverse, -an: disable audio
+        //tip: reverse will cost a lot of time, only short video are recommended
+        String reverseVideo = "ffmpeg -i %s -vf reverse -an %s";
         reverseVideo = String.format(reverseVideo, inputFile, targetFile);
         return reverseVideo.split(" ");
     }
 
     /**
-     * 视频降噪
+     * noise reduction with video
      *
-     * @param inputFile  输入文件
-     * @param targetFile 输出文件
-     * @return 视频降噪的 Command Line
+     * @param inputFile  input file
+     * @param targetFile output file
+     * @return noise reduction success or not
      */
     public static String[] denoiseVideo(String inputFile, String targetFile) {
-        String reverseVideo = "ffmpeg -i %s -nr 500 %s";
-        reverseVideo = String.format(reverseVideo, inputFile, targetFile);
-        return reverseVideo.split(" ");
+        String denoiseVideo = "ffmpeg -i %s -nr 500 %s";
+        denoiseVideo = String.format(denoiseVideo, inputFile, targetFile);
+        return denoiseVideo.split(" ");
     }
 
     /**
-     * 视频抽帧转成图片
+     * covert video into a series of pictures
      *
-     * @param inputFile  输入文件
-     * @param startTime  开始时间
-     * @param duration   持续时间
-     * @param frameRate  帧率
-     * @param targetFile 输出文件
-     * @return 视频抽帧的 Command Line
+     * @param inputFile  input file
+     * @param startTime  startTime in the video
+     * @param duration   duration, how long you want
+     * @param frameRate  frameRate
+     * @param targetFile output file
+     * @return convert success or not
      */
     public static String[] videoToImage(String inputFile, int startTime, int duration, int frameRate, String targetFile) {
-        //-ss：开始时间，单位为秒
-        //-t：持续时间，单位为秒
-        //-r：帧率，每秒抽多少帧
+        //-ss：start time
+        //-t：duration
+        //-r：frame rate
         String toImage = "ffmpeg -i %s -ss %s -t %s -r %s %s";
         toImage = String.format(Locale.CHINESE, toImage, inputFile, startTime, duration, frameRate, targetFile);
         toImage = toImage + "%3d.jpg";
@@ -346,28 +442,28 @@ public class FFmpegUtil {
     }
 
     /**
-     * 视频叠加成画中画
+     * convert videos into picture-in-picture mode
      *
-     * @param inputFile1 输入文件
-     * @param inputFile2 输入文件
-     * @param targetFile 输出文件
-     * @param x          小视频起点x坐标
-     * @param y          小视频起点y坐标
-     * @return 视频画中画的 Command Line
+     * @param inputFile1 input one
+     * @param inputFile2 input two
+     * @param targetFile output file
+     * @param x          x coordinate point
+     * @param y          y coordinate point
+     * @return convert success or not
      */
     @SuppressLint("DefaultLocale")
     public static String[] picInPicVideo(String inputFile1, String inputFile2, int x, int y, String targetFile) {
-        String reverseVideo = "ffmpeg -i %s -i %s -filter_complex overlay=%d:%d %s";
-        reverseVideo = String.format(reverseVideo, inputFile1, inputFile2, x, y, targetFile);
-        return reverseVideo.split(" ");
+        String pipVideo = "ffmpeg -i %s -i %s -filter_complex overlay=%d:%d %s";
+        pipVideo = String.format(pipVideo, inputFile1, inputFile2, x, y, targetFile);
+        return pipVideo.split(" ");
     }
 
     /**
-     * mp4视频的moov往mdat前面移动
+     * move moov box in the front of mdat box, when moox box is behind mdat box(only mp4)
      *
      * @param inputFile  inputFile
      * @param outputFile outputFile
-     * @return 移动moov Command Line
+     * @return move success or not
      */
     public static String[] moveMoovAhead(String inputFile, String outputFile) {
         String moovCmd = "ffmpeg -i %s -movflags faststart -acodec copy -vcodec copy %s";
@@ -376,10 +472,10 @@ public class FFmpegUtil {
     }
 
     /**
-     * 使用ffprobe探测多媒体格式
+     * using FFprobe to parse the media format
      *
      * @param inputFile  inputFile
-     * @return 多媒体格式数据
+     * @return probe success or not
      */
     public static String[] probeFormat(String inputFile) {
         //show format:ffprobe -i %s -show_format -print_format json
@@ -387,6 +483,39 @@ public class FFmpegUtil {
         String ffprobeCmd = "ffprobe -i %s -show_streams -show_format -print_format json";
         ffprobeCmd = String.format(Locale.getDefault(), ffprobeCmd, inputFile);
         return ffprobeCmd.split(" ");
+    }
+
+    /**
+     * Changing the speed of playing, speed range at 0.5-2 in audio-video mode.
+     * However, in pure video mode, the speed range at 0.25-4
+     * @param inputFile the inputFile of normal speed
+     * @param outputFile the outputFile which you want to change speed
+     * @param speed speed of playing
+     * @param pureVideo whether pure video or not, default false
+     * @return change speed success or not
+     */
+    public static String[] changeSpeed(String inputFile, String outputFile, float speed, boolean pureVideo) {
+        //audio atempo: 0.5--2
+        //video pts:0.25--4
+        if (pureVideo) {
+            if (speed > 4 || speed < 0.25) {
+                throw new IllegalArgumentException("speed range is 0.25--4");
+            }
+        } else {
+            if (speed > 2 || speed < 0.5) {
+                throw new IllegalArgumentException("speed range is 0.5--2");
+            }
+        }
+        float ptsFactor = 1/speed;
+        String speedCmd;
+        if (pureVideo) {
+            speedCmd = "ffmpeg -i %s -filter_complex [0:v]setpts=%.2f*PTS[v] -map [v] %s";
+            speedCmd = String.format(Locale.getDefault(), speedCmd, inputFile, ptsFactor, outputFile);
+        } else {
+            speedCmd = "ffmpeg -i %s -filter_complex [0:v]setpts=%.2f*PTS[v];[0:a]atempo=%.2f[a] -map [v] -map [a] %s";
+            speedCmd = String.format(Locale.getDefault(), speedCmd, inputFile, ptsFactor, speed, outputFile);
+        }
+        return speedCmd.split(" ");
     }
 
 }

@@ -12,7 +12,7 @@ import com.frank.ffmpeg.R;
 import com.frank.ffmpeg.util.FileUtil;
 
 /**
- * 音视频 decoding Play
+ * mediaPlayer, which decode by software
  * Created by frank on 2018/2/12.
  */
 

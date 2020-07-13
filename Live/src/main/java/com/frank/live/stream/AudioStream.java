@@ -74,10 +74,11 @@ public class AudioStream {
     }
 
     /**
-     *  Set mute
-     * @param isMute  Whether to mute
+     * Setting mute or not
+     *
+     * @param isMute isMute
      */
-    public void setMute(boolean isMute){
+    public void setMute(boolean isMute) {
         this.isMute = isMute;
     }
 

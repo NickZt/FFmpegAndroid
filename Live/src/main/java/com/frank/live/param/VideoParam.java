@@ -1,7 +1,7 @@
 package com.frank.live.param;
 
 /**
- * 视频 Related parameters
+ * Video param Entity
  * Created by frank on 2018/1/28.
  */
 

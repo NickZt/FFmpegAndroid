@@ -1,75 +1,71 @@
 package com.frank.ffmpeg.util;
 
-import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.Color;
-import android.view.Gravity;
-import android.view.View;
-import android.widget.LinearLayout;
-import android.widget.TextView;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.text.TextUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
 /**
- * bitmap工具类：文字转成图片
+ * bitmap tool
  * Created by frank on 2018/1/24.
  */
 
 public class BitmapUtil {
 
-    private final static int TEXT_SIZE = 16;
-    private final static int TEXT_COLOR = Color.RED;
-
     /**
-     * 文本转成Bitmap
-     * @param text 文本内容
-     * @param context 上下文
-     * @return 图片的bitmap
+     * convert text to bitmap
+     *
+     * @param text text
+     * @return bitmap of teh text
      */
-    private static Bitmap textToBitmap(String text , Context context) {
-        float scale = context.getResources().getDisplayMetrics().scaledDensity;
-        TextView tv = new TextView(context);
-        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        tv.setLayoutParams(layoutParams);
-        tv.setText(text);
-        tv.setTextSize(scale * TEXT_SIZE);
-        tv.setGravity(Gravity.CENTER_HORIZONTAL);
-        tv.setDrawingCacheEnabled(true);
-        tv.setTextColor(TEXT_COLOR);
-        tv.setBackgroundColor(Color.WHITE);
-        tv.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        tv.layout(0, 0, tv.getMeasuredWidth(), tv.getMeasuredHeight());
-        tv.buildDrawingCache();
-        Bitmap bitmap = tv.getDrawingCache();
-        int rate = bitmap.getHeight() / 20;
-        return Bitmap.createScaledBitmap(bitmap, bitmap.getWidth()/rate, 20, false);
+    private static Bitmap textToBitmap(String text, int textColor, int textSize) {
+        if (TextUtils.isEmpty(text) || textSize <= 0) {
+            return null;
+        }
+        Paint paint = new Paint();
+        paint.setTextSize(textSize);
+        paint.setTextAlign(Paint.Align.LEFT);
+        paint.setColor(textColor);
+        paint.setDither(true);
+        paint.setAntiAlias(true);
+        Paint.FontMetricsInt fm = paint.getFontMetricsInt();
+        int width = (int)paint.measureText(text);
+        int height = fm.descent - fm.ascent;
+
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawText(text, 0, fm.leading - fm.ascent, paint);
+        canvas.save();
+        return bitmap;
     }
 
     /**
-     * 文字生成图片
+     * convert text to picture
+     *
      * @param filePath filePath
-     * @param text text
-     * @param context context
-     * @return 生成图片是否成功
+     * @param text     text
+     * @return result of generating picture
      */
-    public static boolean textToPicture(String filePath, String text , Context context){
-        Bitmap bitmap = textToBitmap(text , context);
+    public static boolean textToPicture(String filePath, String text, int textColor, int textSize) {
+        Bitmap bitmap = textToBitmap(text, textColor, textSize);
+        if (bitmap == null || TextUtils.isEmpty(filePath)) {
+            return false;
+        }
         FileOutputStream outputStream = null;
         try {
             outputStream = new FileOutputStream(filePath);
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
             outputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
             return false;
-        }finally {
+        } finally {
             try {
-                if(outputStream != null){
+                if (outputStream != null) {
                     outputStream.close();
                 }
             } catch (IOException e) {
@@ -80,9 +76,10 @@ public class BitmapUtil {
     }
 
     /**
-     * 删除源文件
+     * delete file
+     *
      * @param filePath filePath
-     * @return 删除是否成功
+     * @return result of deletion
      */
     public static boolean deleteTextFile(String filePath) {
         File file = new File(filePath);

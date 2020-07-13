@@ -7,11 +7,12 @@ import android.os.Message;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import com.frank.ffmpeg.AudioPlayer;
 import com.frank.ffmpeg.R;
@@ -22,21 +23,27 @@ import com.frank.ffmpeg.util.FileUtil;
 
 import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_BEGIN;
 import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_FINISH;
+import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_PROGRESS;
 
 /**
- * 使用ffmpeg处理 Audio
+ * Using ffmpeg command to handle audio
  * Created by frank on 2018/1/23.
  */
 
 public class AudioHandleActivity extends BaseActivity {
 
     private final static String PATH = Environment.getExternalStorageDirectory().getPath();
-    private String appendFile = PATH + File.separator + "test.mp3";
+    private String appendFile = PATH + File.separator + "heart.m4a";
 
-    private ProgressBar progressAudio;
     private LinearLayout layoutAudioHandle;
+    private LinearLayout layoutProgress;
+    private TextView txtProgress;
     private int viewId;
     private FFmpegHandler ffmpegHandler;
+
+    private String outputPath1 = PATH + File.separator + "output1.mp3";
+    private String outputPath2 = PATH + File.separator + "output2.mp3";
+    private boolean isJointing = false;
 
     private final static boolean useFFmpeg = true;
 
@@ -47,12 +54,27 @@ public class AudioHandleActivity extends BaseActivity {
             super.handleMessage(msg);
             switch (msg.what) {
                 case MSG_BEGIN:
-                    progressAudio.setVisibility(View.VISIBLE);
+                    layoutProgress.setVisibility(View.VISIBLE);
                     layoutAudioHandle.setVisibility(View.GONE);
                     break;
                 case MSG_FINISH:
-                    progressAudio.setVisibility(View.GONE);
+                    layoutProgress.setVisibility(View.GONE);
                     layoutAudioHandle.setVisibility(View.VISIBLE);
+                    if (isJointing) {
+                        isJointing = false;
+                        FileUtil.deleteFile(outputPath1);
+                        FileUtil.deleteFile(outputPath2);
+                    }
+                    break;
+                case MSG_PROGRESS:
+                    int progress = msg.arg1;
+                    int duration = msg.arg2;
+                    if (progress > 0) {
+                        txtProgress.setVisibility(View.VISIBLE);
+                        txtProgress.setText(String.format(Locale.getDefault(), "%d%%", progress));
+                    } else {
+                        txtProgress.setVisibility(View.INVISIBLE);
+                    }
                     break;
                 default:
                     break;
@@ -75,7 +97,8 @@ public class AudioHandleActivity extends BaseActivity {
     }
 
     private void initView() {
-        progressAudio = getView(R.id.progress_audio);
+        layoutProgress = getView(R.id.layout_progress);
+        txtProgress = getView(R.id.txt_progress);
         layoutAudioHandle = getView(R.id.layout_audio_handle);
         initViewsWithClick(
                 R.id.btn_transform,
@@ -101,7 +124,7 @@ public class AudioHandleActivity extends BaseActivity {
     }
 
     /**
-     * 调用ffmpeg处理 Audio
+     * Using ffmpeg cmd to handle audio
      *
      * @param srcFile srcFile
      */
@@ -115,22 +138,19 @@ public class AudioHandleActivity extends BaseActivity {
             return;
         }
         switch (viewId) {
-            case R.id.btn_transform://转码
-                if (useFFmpeg) { //使用FFmpeg转码
+            case R.id.btn_transform:
+                if (useFFmpeg) { //use FFmpeg to transform
                     String transformFile = PATH + File.separator + "transformAudio.mp3";
                     commandLine = FFmpegUtil.transformAudio(srcFile, transformFile);
-                } else { //使用MediaCodec versus mp3lame转mp3
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            String transformInput = PATH + File.separator + "transformAudio.mp3";
-                            Mp3Converter mp3Converter = new Mp3Converter();
-                            mp3Converter.convertToMp3(srcFile, transformInput);
-                        }
+                } else { //use MediaCodec and libmp3lame to transform
+                    new Thread(() -> {
+                        String transformInput = PATH + File.separator + "transformAudio.mp3";
+                        Mp3Converter mp3Converter = new Mp3Converter();
+                        mp3Converter.convertToMp3(srcFile, transformInput);
                     }).start();
                 }
                 break;
-            case R.id.btn_cut://剪切(注意原文件 versus 剪切文件格式一致，文件绝对路径最好不包含中文、特殊字符)
+            case R.id.btn_cut://cut audio, it's best not include special characters
                 String suffix = FileUtil.getFileSuffix(srcFile);
                 if (suffix == null || suffix.isEmpty()) {
                     return;
@@ -138,17 +158,19 @@ public class AudioHandleActivity extends BaseActivity {
                 String cutFile = PATH + File.separator + "cutAudio" + suffix;
                 commandLine = FFmpegUtil.cutAudio(srcFile, 10, 15, cutFile);
                 break;
-            case R.id.btn_concat://merge，支持MP3、AAC、AMR等，不支持PCM裸流，不支持WAV（PCM裸流加 Audio头）
+            case R.id.btn_concat://concat audio
                 if (!FileUtil.checkFileExist(appendFile)) {
                     return;
                 }
-                List<String> fileList = new ArrayList<>();
-                fileList.add(srcFile);
-                fileList.add(appendFile);
-                String concatFile = PATH + File.separator + "concat.mp3";
-                commandLine = FFmpegUtil.concatAudio(fileList, concatFile);
-                break;
-            case R.id.btn_mix://混音
+//                List<String> fileList = new ArrayList<>();
+//                fileList.add(srcFile);
+//                fileList.add(appendFile);
+//                String concatFile = PATH + File.separator + "concat.mp3";
+//                commandLine = FFmpegUtil.concatAudio(fileList, concatFile);
+//                break;
+                concatAudio(srcFile);
+                return;
+            case R.id.btn_mix://mix audio
                 if (!FileUtil.checkFileExist(appendFile)) {
                     return;
                 }
@@ -159,36 +181,25 @@ public class AudioHandleActivity extends BaseActivity {
                 String mixFile = PATH + File.separator + "mix" + mixSuffix;
                 commandLine = FFmpegUtil.mixAudio(srcFile, appendFile, mixFile);
                 break;
-            case R.id.btn_play_audio:// decoding Play（AudioTrack）
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        new AudioPlayer().play(srcFile);
-                    }
-                }).start();
+            case R.id.btn_play_audio://use AudioTrack to play audio
+                new Thread(() -> new AudioPlayer().play(srcFile)).start();
                 return;
-            case R.id.btn_play_opensl:// decoding Play（OpenSL ES）
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        new AudioPlayer().playAudio(srcFile);
-                    }
-                }).start();
+            case R.id.btn_play_opensl://use OpenSL ES to play audio
+                new Thread(() -> new AudioPlayer().playAudio(srcFile)).start();
                 return;
-            case R.id.btn_audio_encode:// Audio coding
-                //可 coding 成WAV、AAC。如果需要 coding 成MP3，ffmpeg需要重新编译，把MP3库enable
+            case R.id.btn_audio_encode://audio encode
                 String pcmFile = PATH + File.separator + "concat.pcm";
                 String wavFile = PATH + File.separator + "new.wav";
-                //pcm数据的采样率，一般采样率为8000、16000、44100
+                //sample rate, normal is 8000/16000/44100
                 int sampleRate = 8000;
-                //pcm数据的声道，单声道为1，立体声道为2
+                //channel num of pcm
                 int channel = 1;
                 commandLine = FFmpegUtil.encodeAudio(pcmFile, wavFile, sampleRate, channel);
                 break;
-            case R.id.btn_pcm_concat://PCM裸流 Audio文件merge
-                String srcPCM = PATH + File.separator + "audio.pcm";//第一个pcm文件
-                String appendPCM = PATH + File.separator + "audio.pcm";//第二个pcm文件
-                String concatPCM = PATH + File.separator + "concat.pcm";//merge后的文件
+            case R.id.btn_pcm_concat://concat PCM streams
+                String srcPCM = PATH + File.separator + "audio.pcm";
+                String appendPCM = PATH + File.separator + "audio.pcm";
+                String concatPCM = PATH + File.separator + "concat.pcm";
                 if (!FileUtil.checkFileExist(srcPCM) || !FileUtil.checkFileExist(appendPCM)) {
                     return;
                 }
@@ -200,9 +211,28 @@ public class AudioHandleActivity extends BaseActivity {
             default:
                 break;
         }
-        if (ffmpegHandler != null  && commandLine != null) {
+        if (ffmpegHandler != null && commandLine != null) {
             ffmpegHandler.executeFFmpegCmd(commandLine);
         }
+    }
+
+    private void concatAudio(String selectedPath) {
+        if (ffmpegHandler == null || selectedPath.isEmpty() || appendFile.isEmpty()) {
+            return;
+        }
+        isJointing = true;
+        String targetPath = PATH + File.separator + "concatAudio.mp3";
+        String[] transformCmd1 = FFmpegUtil.transformAudio(selectedPath, "libmp3lame", outputPath1);
+        String[] transformCmd2 = FFmpegUtil.transformAudio(appendFile, "libmp3lame", outputPath2);
+        List<String> fileList = new ArrayList<>();
+        fileList.add(outputPath1);
+        fileList.add(outputPath2);
+        String[] jointVideoCmd = FFmpegUtil.concatAudio(fileList, targetPath);
+        List<String[]> commandList = new ArrayList<>();
+        commandList.add(transformCmd1);
+        commandList.add(transformCmd2);
+        commandList.add(jointVideoCmd);
+        ffmpegHandler.executeFFmpegCmds(commandList);
     }
 
     @Override

@@ -10,20 +10,23 @@ import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
+import android.widget.TextView;
+
 import com.frank.ffmpeg.R;
 import com.frank.ffmpeg.handler.FFmpegHandler;
 import com.frank.ffmpeg.util.FFmpegUtil;
 import com.frank.ffmpeg.util.FileUtil;
 
 import java.io.File;
+import java.util.Locale;
 
 import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_BEGIN;
 import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_CONTINUE;
 import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_FINISH;
+import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_PROGRESS;
 
 /**
- * 使用ffmpeg进行Audio and video synthesis versus 分离
+ * using ffmpeg to handle media
  * Created by frank on 2018/1/23.
  */
 public class MediaHandleActivity extends BaseActivity {
@@ -33,41 +36,38 @@ public class MediaHandleActivity extends BaseActivity {
     private String videoFile;
     private String temp = PATH + File.separator + "temp.mp4";
 
-    private ProgressBar progressMedia;
+    private LinearLayout layoutProgress;
+    private TextView txtProgress;
     private int viewId;
     private LinearLayout layoutMediaHandle;
     private FFmpegHandler ffmpegHandler;
 
     @SuppressLint("HandlerLeak")
-    private Handler mHandler = new Handler(){
+    private Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
-            switch (msg.what){
+            switch (msg.what) {
                 case MSG_CONTINUE:
-                    String audioFile = PATH + File.separator + "tiger.mp3";//tiger.mp3
+                    String audioFile = PATH + File.separator + "tiger.mp3";
                     String muxFile = PATH + File.separator + "media-mux.mp4";
 
                     try {
-                        //使用MediaPlayerObtain视频时长
                         MediaPlayer mediaPlayer = new MediaPlayer();
                         mediaPlayer.setDataSource(videoFile);
                         mediaPlayer.prepare();
-                        //单位为ms
-                        int videoDuration = mediaPlayer.getDuration()/1000;
+                        //ms
+                        int videoDuration = mediaPlayer.getDuration() / 1000;
                         Log.i(TAG, "videoDuration=" + videoDuration);
                         mediaPlayer.release();
-                        //使用MediaMetadataRetrieverObtain Audio时长
                         MediaMetadataRetriever mediaRetriever = new MediaMetadataRetriever();
                         mediaRetriever.setDataSource(audioFile);
-                        //单位为ms
                         String duration = mediaRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-                        int audioDuration = (int)(Long.parseLong(duration)/1000);
+                        int audioDuration = (int) (Long.parseLong(duration) / 1000);
                         Log.i(TAG, "audioDuration=" + audioDuration);
                         mediaRetriever.release();
-                        //如果视频时长比 Audio长，采用 Audio时长，否则用视频时长
                         int mDuration = Math.min(audioDuration, videoDuration);
-                        //使用纯视频 versus  Audio进行合成
+                        //mux video and audio
                         String[] commandLine = FFmpegUtil.mediaMux(temp, audioFile, mDuration, muxFile);
                         if (ffmpegHandler != null) {
                             ffmpegHandler.isContinue(false);
@@ -78,12 +78,21 @@ public class MediaHandleActivity extends BaseActivity {
                     }
                     break;
                 case MSG_BEGIN:
-                    progressMedia.setVisibility(View.VISIBLE);
+                    layoutProgress.setVisibility(View.VISIBLE);
                     layoutMediaHandle.setVisibility(View.GONE);
                     break;
                 case MSG_FINISH:
-                    progressMedia.setVisibility(View.GONE);
+                    layoutProgress.setVisibility(View.GONE);
                     layoutMediaHandle.setVisibility(View.VISIBLE);
+                    break;
+                case MSG_PROGRESS:
+                    int progress = msg.arg1;
+                    if (progress > 0) {
+                        txtProgress.setVisibility(View.VISIBLE);
+                        txtProgress.setText(String.format(Locale.getDefault(), "%d%%", progress));
+                    } else {
+                        txtProgress.setVisibility(View.INVISIBLE);
+                    }
                     break;
                 default:
                     break;
@@ -106,7 +115,8 @@ public class MediaHandleActivity extends BaseActivity {
     }
 
     private void initView() {
-        progressMedia = getView(R.id.progress_media);
+        layoutProgress = getView(R.id.layout_progress);
+        txtProgress = getView(R.id.txt_progress);
         layoutMediaHandle = getView(R.id.layout_media_handle);
         initViewsWithClick(
                 R.id.btn_mux,
@@ -127,12 +137,13 @@ public class MediaHandleActivity extends BaseActivity {
     }
 
     /**
-     * 调用ffmpeg处理音视频
+     * Using ffmpeg cmd to handle media
+     *
      * @param srcFile srcFile
      */
     private void doHandleMedia(String srcFile) {
         String[] commandLine = null;
-        if (!FileUtil.checkFileExist(srcFile)){
+        if (!FileUtil.checkFileExist(srcFile)) {
             return;
         }
         if (!FileUtil.isVideo(srcFile)) {
@@ -140,10 +151,9 @@ public class MediaHandleActivity extends BaseActivity {
             return;
         }
 
-        switch (viewId){
-            case R.id.btn_mux://Audio and video synthesis
+        switch (viewId) {
+            case R.id.btn_mux://mux
                 try {
-                    //视频文件有 Audio,先把纯视频文件抽取出来
                     videoFile = srcFile;
                     commandLine = FFmpegUtil.extractVideo(srcFile, temp);
                     if (ffmpegHandler != null) {
@@ -153,11 +163,11 @@ public class MediaHandleActivity extends BaseActivity {
                     e.printStackTrace();
                 }
                 break;
-            case R.id.btn_extract_audio://提取 Audio
+            case R.id.btn_extract_audio://extract audio
                 String extractAudio = PATH + File.separator + "extractAudio.aac";
                 commandLine = FFmpegUtil.extractAudio(srcFile, extractAudio);
                 break;
-            case R.id.btn_extract_video://提取视频
+            case R.id.btn_extract_video://extract video
                 String extractVideo = PATH + File.separator + "extractVideo.mp4";
                 commandLine = FFmpegUtil.extractVideo(srcFile, extractVideo);
                 break;

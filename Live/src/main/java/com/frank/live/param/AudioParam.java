@@ -2,7 +2,7 @@ package com.frank.live.param;
 
 
 /**
- *  Audio Related parameters
+ * Audio param Entity
  * Created by frank on 2018/1/28.
  */
 

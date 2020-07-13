@@ -1,6 +1,8 @@
 package com.frank.ffmpeg.activity;
 
 import android.annotation.SuppressLint;
+import android.graphics.Color;
+import android.media.MediaMetadataRetriever;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -8,30 +10,53 @@ import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import com.frank.ffmpeg.FFmpegCmd;
 import com.frank.ffmpeg.R;
 import com.frank.ffmpeg.format.VideoLayout;
 import com.frank.ffmpeg.handler.FFmpegHandler;
+import com.frank.ffmpeg.model.MediaBean;
+import com.frank.ffmpeg.tool.JsonParseTool;
+import com.frank.ffmpeg.util.BitmapUtil;
 import com.frank.ffmpeg.util.FFmpegUtil;
 import com.frank.ffmpeg.util.FileUtil;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_BEGIN;
 import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_FINISH;
+import static com.frank.ffmpeg.handler.FFmpegHandler.MSG_PROGRESS;
 
+/**
+ * video process by FFmpeg command
+ * Created by frank on 2018/1/25.
+ */
 public class VideoHandleActivity extends BaseActivity {
 
     private final static String TAG = VideoHandleActivity.class.getSimpleName();
     private static final String PATH = Environment.getExternalStorageDirectory().getPath();
 
-    private ProgressBar progressVideo;
     private LinearLayout layoutVideoHandle;
+    private LinearLayout layoutProgress;
+    private TextView txtProgress;
     private int viewId;
     private FFmpegHandler ffmpegHandler;
     private final static boolean useFFmpegCmd = true;
+
+    private final static int TYPE_IMAGE = 1;
+    private final static int TYPE_GIF   = 2;
+    private final static int TYPE_TEXT  = 3;
+
+    private String appendPath = PATH + File.separator + "snow.mp4";
+    private String outputPath1 = PATH + File.separator + "output1.ts";
+    private String outputPath2 = PATH + File.separator + "output2.ts";
+    private String listPath = PATH + File.separator + "listFile.txt";
+
+    private boolean isJointing = false;
 
     @SuppressLint("HandlerLeak")
     private Handler mHandler = new Handler() {
@@ -40,12 +65,28 @@ public class VideoHandleActivity extends BaseActivity {
             super.handleMessage(msg);
             switch (msg.what) {
                 case MSG_BEGIN:
-                    progressVideo.setVisibility(View.VISIBLE);
+                    layoutProgress.setVisibility(View.VISIBLE);
                     layoutVideoHandle.setVisibility(View.GONE);
                     break;
                 case MSG_FINISH:
-                    progressVideo.setVisibility(View.GONE);
+                    layoutProgress.setVisibility(View.GONE);
                     layoutVideoHandle.setVisibility(View.VISIBLE);
+                    if (isJointing) {
+                        isJointing = false;
+                        FileUtil.deleteFile(outputPath1);
+                        FileUtil.deleteFile(outputPath2);
+                        FileUtil.deleteFile(listPath);
+                    }
+                    break;
+                case MSG_PROGRESS:
+                    int progress = msg.arg1;
+                    int duration = msg.arg2;
+                    if (progress > 0) {
+                        txtProgress.setVisibility(View.VISIBLE);
+                        txtProgress.setText(String.format(Locale.getDefault(), "%d%%", progress));
+                    } else {
+                        txtProgress.setVisibility(View.INVISIBLE);
+                    }
                     break;
                 default:
                     break;
@@ -68,7 +109,8 @@ public class VideoHandleActivity extends BaseActivity {
     }
 
     private void intView() {
-        progressVideo = getView(R.id.progress_video);
+        layoutProgress = getView(R.id.layout_progress);
+        txtProgress = getView(R.id.txt_progress);
         layoutVideoHandle = getView(R.id.layout_video_handle);
         initViewsWithClick(
                 R.id.btn_video_transform,
@@ -84,7 +126,8 @@ public class VideoHandleActivity extends BaseActivity {
                 R.id.btn_denoise_video,
                 R.id.btn_to_image,
                 R.id.btn_pip,
-                R.id.btn_moov
+                R.id.btn_moov,
+                R.id.btn_speed
         );
     }
 
@@ -104,7 +147,7 @@ public class VideoHandleActivity extends BaseActivity {
     }
 
     /**
-     * 调用ffmpeg处理视频
+     * Using FFmpeg cmd to handle video
      *
      * @param srcFile srcFile
      */
@@ -118,11 +161,11 @@ public class VideoHandleActivity extends BaseActivity {
             return;
         }
         switch (viewId) {
-            case R.id.btn_video_transform://视频转码:mp4转flv、wmv, 或者flv、wmv转Mp4
+            case R.id.btn_video_transform://transform format
                 String transformVideo = PATH + File.separator + "transformVideo.mp4";
                 commandLine = FFmpegUtil.transformVideo(srcFile, transformVideo);
                 break;
-            case R.id.btn_video_cut://视频剪切
+            case R.id.btn_video_cut://cut video
                 String suffix = FileUtil.getFileSuffix(srcFile);
                 if (suffix == null || suffix.isEmpty()) {
                     return;
@@ -132,45 +175,52 @@ public class VideoHandleActivity extends BaseActivity {
                 int duration = 20;
                 commandLine = FFmpegUtil.cutVideo(srcFile, startTime, duration, cutVideo);
                 break;
-            case R.id.btn_video_concat://视频merge
-//                commandLine = FFmpegUtil.toTs(srcFile, ts1);
-//                concatStep ++;
-//                String concatVideo = PATH + File.separator + "concatVideo.mp4";
-//                String appendVideo = PATH + File.separator + "test.mp4";
-//                File concatFile = new File(PATH + File.separator + "fileList.txt");
-//                try {
-//                    FileOutputStream fileOutputStream = new FileOutputStream(concatFile);
-//                    fileOutputStream.write(("file \'" + srcFile + "\'").getBytes());
-//                    fileOutputStream.write("\n".getBytes());
-//                    fileOutputStream.write(("file \'" + appendVideo + "\'").getBytes());
-//                    fileOutputStream.flush();
-//                    fileOutputStream.close();
-//                } catch (Exception e) {
-//                    e.printStackTrace();
-//                }
-//                commandLine = FFmpegUtil.concatVideo(srcFile, concatFile.getAbsolutePath(), concatVideo);
+            case R.id.btn_video_concat://concat video together
+                concatVideo(srcFile);
                 break;
-            case R.id.btn_screen_shot://视频截图
+            case R.id.btn_screen_shot://video snapshot
                 String screenShot = PATH + File.separator + "screenShot.jpg";
                 int time = 18;
                 commandLine = FFmpegUtil.screenShot(srcFile, time, screenShot);
                 break;
-            case R.id.btn_water_mark://视频添加水印
-                //1、图片
-                String photo = PATH + File.separator + "launcher.png";
-                String photoMark = PATH + File.separator + "photoMark.mp4";
-                String mResolution = "720x1280";
-                int bitRate = 1024;
-                commandLine = FFmpegUtil.addWaterMark(srcFile, photo, mResolution, bitRate, photoMark);
-                //2、文字
-//                String text = "Hello,FFmpeg";
-//                String textPath = PATH + File.separator + "text.jpg";
-//                boolean result = BitmapUtil.textToPicture(textPath, text, this);
-//                Log.i(TAG, "text to pitcture result=" + result);
-//                String textMark = PATH + File.separator + "textMark.mp4";
-//                commandLine = FFmpegUtil.addWaterMark(srcFile, textPath, textMark);
+            case R.id.btn_water_mark://add watermark to video
+                // the unit of bitRate is kb
+                int bitRate = 500;
+                MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+                retriever.setDataSource(srcFile);
+                String mBitRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE);
+                if (mBitRate != null && !mBitRate.isEmpty()) {
+                    int probeBitrate = Integer.valueOf(mBitRate);
+                    bitRate = (probeBitrate/1000/100) * 100;
+                }
+                //1:top left 2:top right 3:bottom left 4:bottom right
+                int location = 2;
+                int offsetXY = 5;
+                int waterMarkType = 1;
+                switch (waterMarkType) {
+                    case TYPE_IMAGE:// image
+                        String photo = PATH + File.separator + "launcher.png";
+                        String photoMark = PATH + File.separator + "photoMark.mp4";
+                        commandLine = FFmpegUtil.addWaterMarkImg(srcFile, photo, location, bitRate, offsetXY, photoMark);
+                        break;
+                    case TYPE_GIF:// gif
+                        String gifPath = PATH + File.separator + "ok.gif";
+                        String gifWaterMark = PATH + File.separator + "gifWaterMark.mp4";
+                        commandLine = FFmpegUtil.addWaterMarkGif(srcFile, gifPath, location, bitRate, offsetXY, gifWaterMark);
+                        break;
+                    case TYPE_TEXT:// text
+                        String text = "Hello,FFmpeg";
+                        String textPath = PATH + File.separator + "text.png";
+                        boolean result = BitmapUtil.textToPicture(textPath, text, Color.BLUE, 20);
+                        Log.i(TAG, "text to picture result=" + result);
+                        String textMark = PATH + File.separator + "textMark.mp4";
+                        commandLine = FFmpegUtil.addWaterMarkImg(srcFile, textPath, location, bitRate, offsetXY, textMark);
+                        break;
+                    default:
+                        break;
+                }
                 break;
-            case R.id.btn_generate_gif://视频转成gif
+            case R.id.btn_generate_gif://convert video into gif
                 String Video2Gif = PATH + File.separator + "Video2Gif.gif";
                 int gifStart = 30;
                 int gifDuration = 5;
@@ -179,13 +229,13 @@ public class VideoHandleActivity extends BaseActivity {
                 commandLine = FFmpegUtil.generateGif(srcFile, gifStart, gifDuration,
                         resolution, frameRate, Video2Gif);
                 break;
-            case R.id.btn_screen_record://屏幕录制
+            case R.id.btn_screen_record://screen recording
 //                String screenRecord = PATH + File.separator + "screenRecord.mp4";
 //                String screenSize = "320x240";
 //                int recordTime = 10;
 //                commandLine = FFmpegUtil.screenRecord(screenSize, recordTime, screenRecord);
                 break;
-            case R.id.btn_multi_video://视频画面拼接:分辨率、时长、封装格式不一致时，先把视频源转为一致
+            case R.id.btn_multi_video://combine video which layout could be horizontal of vertical
                 String input1 = PATH + File.separator + "input1.mp4";
                 String input2 = PATH + File.separator + "input2.mp4";
                 String outputFile = PATH + File.separator + "multi.mp4";
@@ -194,16 +244,16 @@ public class VideoHandleActivity extends BaseActivity {
                 }
                 commandLine = FFmpegUtil.multiVideo(input1, input2, outputFile, VideoLayout.LAYOUT_HORIZONTAL);
                 break;
-            case R.id.btn_reverse_video://视频反序倒播
+            case R.id.btn_reverse_video://video reverse
                 String output = PATH + File.separator + "reverse.mp4";
                 commandLine = FFmpegUtil.reverseVideo(srcFile, output);
                 break;
-            case R.id.btn_denoise_video://视频降噪
+            case R.id.btn_denoise_video://noise reduction of video
                 String denoise = PATH + File.separator + "denoise.mp4";
                 commandLine = FFmpegUtil.denoiseVideo(srcFile, denoise);
                 break;
-            case R.id.btn_to_image://视频转图片
-                String imagePath = PATH + File.separator + "Video2Image/";//图片保存路径
+            case R.id.btn_to_image://convert video to picture
+                String imagePath = PATH + File.separator + "Video2Image/";
                 File imageFile = new File(imagePath);
                 if (!imageFile.exists()) {
                     boolean result = imageFile.mkdir();
@@ -211,25 +261,25 @@ public class VideoHandleActivity extends BaseActivity {
                         return;
                     }
                 }
-                int mStartTime = 10;//开始时间
-                int mDuration = 20;//持续时间（注意开始时间+持续时间之和不能大于视频总时长）
-                int mFrameRate = 10;//帧率（从视频中每秒抽多少帧）
+                int mStartTime = 10;//start time
+                int mDuration = 20;//duration
+                int mFrameRate = 10;//frameRate
                 commandLine = FFmpegUtil.videoToImage(srcFile, mStartTime, mDuration, mFrameRate, imagePath);
                 break;
-            case R.id.btn_pip://两个视频合成画中画
+            case R.id.btn_pip://combine into picture-in-picture video
                 String inputFile1 = PATH + File.separator + "beyond.mp4";
                 String inputFile2 = PATH + File.separator + "small_girl.mp4";
                 if (!FileUtil.checkFileExist(inputFile1) && !FileUtil.checkFileExist(inputFile2)) {
                     return;
                 }
-                //x、y坐标点需要根据全屏视频 versus 小视频大小，进行计算
-                //比如：全屏视频为320x240，小视频为120x90，那么x=200 y=150
+                //x and y coordinate points need to be calculated according to the size of full video and small video
+                //For example: full video is 320x240, small video is 120x90, so x=200 y=150
                 int x = 200;
                 int y = 150;
                 String picInPic = PATH + File.separator + "PicInPic.mp4";
                 commandLine = FFmpegUtil.picInPicVideo(inputFile1, inputFile2, x, y, picInPic);
                 break;
-            case R.id.btn_moov://moov前移操作，针对mp4视频moov在mdat后面的情况
+            case R.id.btn_moov://moov box moves ahead, which is behind mdat box of mp4 video
                 if (!srcFile.endsWith(FileUtil.TYPE_MP4)) {
                     showToast(getString(R.string.tip_not_mp4_video));
                     return;
@@ -249,6 +299,10 @@ public class VideoHandleActivity extends BaseActivity {
                     Log.e(TAG, "move moov use time=" + (System.currentTimeMillis() - start));
                 }
                 break;
+            case R.id.btn_speed://playing speed of video
+                String speed = PATH + File.separator + "speed.mp4";
+                commandLine = FFmpegUtil.changeSpeed(srcFile, speed, 2f, false);
+                break;
             default:
                 break;
         }
@@ -258,20 +312,72 @@ public class VideoHandleActivity extends BaseActivity {
     }
 
     /**
-     * 图片合成视频
+     * concat/joint two videos together
+     * It's recommended to convert to the same resolution and encoding
+     * @param selectedPath the path which is selected
+     */
+    private void concatVideo(String selectedPath) {
+        if (ffmpegHandler == null || selectedPath.isEmpty()) {
+            return;
+        }
+        isJointing = true;
+        String targetPath = PATH + File.separator + "jointVideo.mp4";
+        String[] transformCmd1 = FFmpegUtil.transformVideoWithEncode(selectedPath, outputPath1);
+        int width = 0;
+        int height = 0;
+        //probe width and height of the selected video
+        String probeResult = FFmpegCmd.executeProbeSynchronize(FFmpegUtil.probeFormat(selectedPath));
+        MediaBean mediaBean = JsonParseTool.parseMediaFormat(probeResult);
+        if (mediaBean != null && mediaBean.getVideoBean() != null) {
+            width = mediaBean.getVideoBean().getWidth();
+            height = mediaBean.getVideoBean().getHeight();
+            Log.e(TAG, "width=" + width + "--height=" + height);
+        }
+        String[] transformCmd2 = FFmpegUtil.transformVideoWithEncode(appendPath, width, height, outputPath2);
+        List<String> fileList = new ArrayList<>();
+        fileList.add(outputPath1);
+        fileList.add(outputPath2);
+        FileUtil.createListFile(listPath, fileList);
+        String[] jointVideoCmd = FFmpegUtil.jointVideo(listPath, targetPath);
+        List<String[]> commandList = new ArrayList<>();
+        commandList.add(transformCmd1);
+        commandList.add(transformCmd2);
+        commandList.add(jointVideoCmd);
+        ffmpegHandler.executeFFmpegCmds(commandList);
+    }
+
+    /**
+     * Combine pictures into video
      */
     private void handlePhoto() {
-        // 图片所在路径，图片命名格式img+number.jpg
-        // 这里指定目录为根目录下img文件夹
+        // The path of pictures, naming format: img+number.jpg
         String picturePath = PATH + "/img/";
         if (!FileUtil.checkFileExist(picturePath)) {
             return;
         }
+        String tempPath = PATH + "/temp/";
+        File tempFile = new File(tempPath);
+        if (tempFile.exists()) {
+            tempFile.delete();
+        }
+        tempFile.mkdirs();
+        File photoFile = new File(picturePath);
+        File[] files = photoFile.listFiles();
+        List<String[]> cmdList = new ArrayList<>();
+        //the resolution of photo which you want to convert
+        String resolution = "640x320";
+        for (File file : files) {
+            String inputPath = file.getAbsolutePath();
+            String outputPath = tempPath + file.getName();
+            String[] convertCmd = FFmpegUtil.convertResolution(inputPath, resolution, outputPath);
+            cmdList.add(convertCmd);
+        }
         String combineVideo = PATH + File.separator + "combineVideo.mp4";
-        int frameRate = 2;// 合成视频帧率建议:1-10  普通视频帧率一般为25
-        String[] commandLine = FFmpegUtil.pictureToVideo(picturePath, frameRate, combineVideo);
+        int frameRate = 2;// suggested synthetic frameRate:1-10
+        String[] commandLine = FFmpegUtil.pictureToVideo(tempPath, frameRate, combineVideo);
+        cmdList.add(commandLine);
         if (ffmpegHandler != null) {
-            ffmpegHandler.executeFFmpegCmd(commandLine);
+            ffmpegHandler.executeFFmpegCmds(cmdList);
         }
     }
 
